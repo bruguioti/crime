@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Grafos: Análise Forense e Criminal</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 { margin-bottom: 5px; color: #38bdf8; }
+        p.subtitle { color: #94a3b8; margin-top: 0; }
+        
+        .container {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+            max-width: 1200px;
+            margin-top: 20px;
+        }
+
+        canvas {
+            background-color: #1e293b;
+            border: 2px solid #334155;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .sidebar {
+            flex: 1;
+            background-color: #1e293b;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #334155;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        h3 { margin-top: 0; color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: 8px; }
+
+        button {
+            background-color: #0284c7;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #0369a1; }
+        button.secondary { background-color: #475569; }
+        button.secondary:hover { background-color: #334155; }
+        button.danger { background-color: #dc2626; }
+        button.danger:hover { background-color: #b91c1c; }
+
+        .log-box {
+            background-color: #0f172a;
+            border: 1px solid #334155;
+            padding: 10px;
+            border-radius: 4px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 13px;
+            color: #34d399;
+        }
+
+        .instructions {
+            font-size: 14px;
+            color: #cbd5e1;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🕵️‍♂️ Simulador de Grafos: Investigação Criminal</h1>
+    <p class="subtitle">Mapeando redes de suspeitos, pistas e locais de crime usando Teoria dos Grafos.</p>
+
+    <div class="container">
+        <!-- Canvas do Grafo -->
+        <div>
+            <canvas id="grafoCanvas" width="700" height="500"></canvas>
+        </div>
+
+        <!-- Painel de Controle -->
+        <div class="sidebar">
+            <h3>Painel de Ações</h3>
+            <div class="instructions">
+                <strong>Como usar:</strong>
+                <ul>
+                    <li>Clique em <strong>"Adicionar Nó"</strong> para inserir um novo ponto (Pista/Suspeito/Local).</li>
+                    <li>Clique em <strong>"Conectar Nós"</strong> para criar uma relação entre dois pontos.</li>
+                    <li>Clique em <strong>"Investigar Rede (BFS)"</strong> para rastrear conexões a partir do Local do Crime.</li>
+                </ul>
+            </div>
+
+            <button onclick="modoAtual = 'add_no'">➕ Adicionar Nó</button>
+            <button onclick="modoAtual = 'add_aresta'" class="secondary">🔗 Conectar Nós</button>
+            <button onclick="executarBusca()" style="background-color: #10b981;">🔍 Rastrear Rede (BFS)</button>
+            <button onclick="limparGrafo()" class="danger">🗑️ Limpar Grafo</button>
+
+            <h3>Relatório da Investigação</h3>
+            <div id="logBox" class="log-box">Sistema pronto. Aguardando interações...</div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('grafoCanvas');
+        const ctx = canvas.getContext('2d');
+        const logBox = document.getElementById('logBox');
+
+        let nos = [
+            { id: 0, nome: 'Local do Crime', x: 150, y: 250, tipo: 'crime' },
+            { id: 1, nome: 'Suspeito A', x: 350, y: 150, tipo: 'suspeito' },
+            { id: 2, nome: 'Pista (Arma)', x: 350, y: 350, tipo: 'pista' },
+            { id: 3, nome: 'Esconderijo', x: 550, y: 250, tipo: 'local' }
+        ];
+
+        let arestas = [
+            { de: 0, para: 1, peso: 'Ligação' },
+            { de: 0, para: 2, peso: 'Impressão' },
+            { de: 1, para: 3, peso: 'Rota de Fuga' },
+            { de: 2, para: 3, peso: 'Proximidade' }
+        ];
+
+        let modoAtual = null; // 'add_no', 'add_aresta'
+        let noSelecionadoParaAresta = null;
+        let noArrastando = null;
+
+        function log(msg) {
+            logBox.innerHTML += `> ${msg}<br>`;
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        function desenhar() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Desenhar Arestas
+            arestas.forEach(a => {
+                let n1 = nos.find(n => n.id === a.de);
+                let n2 = nos.find(n => n.para === a.id);
+                if (n1 && n2) {
+                    ctx.beginPath();
+                    ctx.moveTo(n1.x, n1.y);
+                    ctx.lineTo(n2.x, n2.y);
+                    ctx.strokeStyle = '#64748b';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                    // Texto da aresta
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.font = '11px sans-serif';
+                    ctx.fillText(a.peso, (n1.x + n2.x) / 2, (n1.y + n2.y) / 2 - 5);
+                }
+            });
+
+            // Desenhar Nós
+            nos.forEach(n => {
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, 22, 0, Math.PI * 2);
+                
+                if (n.tipo === 'crime') ctx.fillStyle = '#ef4444';
+                else if (n.tipo === 'suspeito') ctx.fillStyle = '#f59e0b';
+                else if (n.tipo === 'pista') ctx.fillStyle = '#38bdf8';
+                else ctx.fillStyle = '#8b5cf6';
+
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#ffffff';
+                ctx.stroke();
+
+                // Nome do nó
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(n.nome, n.x, n.y + 35);
+            });
+        }
+
+        // Interações com o Mouse
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            // Verificar se clicou em cima de algum nó existente
+            let clickedNo = nos.find(n => Math.hypot(n.x - x, n.y - y) < 22);
+
+            if (modoAtual === 'add_no' && !clickedNo) {
+                let tipos = ['suspeito', 'pista', 'local'];
+                let tipoEscolhido = tipos[Math.floor(Math.random() * tipos.length)];
+                let novoId = nos.length > 0 ? Math.max(...nos.map(n => n.id)) + 1 : 0;
+                let novoNome = tipoEscolhido === 'suspeito' ? `Suspeito ${String.fromCharCode(65 + novoId)}` : `Pista ${novoId}`;
+                
+                nos.push({ id: novoId, nome: novoNome, x: x, y: y, tipo: tipoEscolhido });
+                log(`Novo elemento adicionado: ${novoNome}`);
+                modoAtual = null;
+                desenhar();
+            } else if (modoAtual === 'add_aresta') {
+                if (clickedNo) {
+                    if (noSelecionadoParaAresta === null) {
+                        noSelecionadoParaAresta = clickedNo;
+                        log(`Origem da conexão selecionada: ${clickedNo.nome}. Clique no segundo nó.`);
+                    } else if (noSelecionadoParaAresta.id !== clickedNo.id) {
+                        arestas.push({ de: noSelecionadoParaAresta.id, para: clickedNo.id, peso: 'Conexão' });
+                        log(`Conexão criada entre ${noSelecionadoParaAresta.nome} e ${clickedNo.nome}`);
+                        noSelecionadoParaAresta = null;
+                        modoAtual = null;
+                        desenhar();
+                    }
+                }
+            }
+        });
+
+        // Simulação de Algoritmo de Grafo (Busca em Largura - BFS)
+        function executarBusca() {
+            if (nos.length === 0) return;
+            log("--- Iniciando Varredura na Rede Criminal (BFS) ---");
+            
+            let inicio = nos.find(n => n.tipo === 'crime') || nos[0];
+            let visitados = new Set();
+            let fila = [inicio.id];
+            visitados.add(inicio.id);
+
+            let ordem = [];
+
+            while (fila.length > 0) {
+                let atualId = fila.shift();
+                let atualObj = nos.find(n => n.id === atualId);
+                ordem.push(atualObj.nome);
+
+                // Encontrar vizinhos
+                let vizinhos = arestas
+                    .filter(a => a.de === atualId || a.para === atualId)
+                    .map(a => a.de === atualId ? a.para : a.de);
+
+                vizinhos.forEach(vId => {
+                    if (!visitados.has(vId)) {
+                        visitados.add(vId);
+                        fila.push(vId);
+                    }
+                });
+            }
+
+            log(`Ordem de análise investigativa: ${ordem.join(' ➔ ')}`);
+            log("Varredura concluída com sucesso.");
+        }
+
+        function limparGrafo() {
+            nos = [];
+            arestas = [];
+            log("Grafo limpo. Reinicie a inserção de nós.");
+            desenhar();
+        }
+
+        // Render inicial
+        desenhar();
+        log("Simulador iniciado. O nó vermelho representa o Local do Crime.");
+    </script>
+</body>
+</html>
